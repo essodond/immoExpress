@@ -8,7 +8,7 @@ const navLinks = [
 ];
 
 export default function Footer() {
-  const num = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '+237600000000').replace(/\D/g, '');
+  const num = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '+22871608097').replace(/\D/g, '');
   const waUrl = `https://wa.me/${num}?text=${encodeURIComponent('Bonjour, je souhaite des informations.')}`;
 
   return (

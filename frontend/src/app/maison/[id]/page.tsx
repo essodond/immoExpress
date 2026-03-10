@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Bed, Bath, Maximize2, MapPin, Calendar, Tag } from 'lucide-react';
+import { Bed, Bath, Maximize2, MapPin, Calendar, Tag, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 import MaisonGalerie from '@/components/maison/MaisonGalerie';
 import VideoEmbed from '@/components/maison/VideoEmbed';
 import WhatsAppButton from '@/components/ui/WhatsAppButton';
@@ -25,7 +26,30 @@ export default async function MaisonDetailPage({ params }: Props) {
   const maison = await getMaison(params.id).catch(() => null);
   if (!maison) notFound();
 
-  const waMessage = `Bonjour, je suis interesse(e) par votre bien: ${maison.titre} - ${formatPrix(maison.prix)}`;
+  const waMessage = `🏠 *DEMANDE D'INFORMATION* 🏠
+
+📋 *BIEN IMMOBILIER*
+Titre: ${maison.titre}
+
+📍 *LOCALISATION*
+Ville: ${maison.ville}
+Quartier: ${maison.quartier}
+
+💰 *PRIX*
+${formatPrix(maison.prix)}
+
+📊 *CARACTÉRISTIQUES*
+• Chambres: ${maison.chambres}
+• Salles de bain: ${maison.sallesBain}
+• Superficie: ${maison.superficie} m²
+• Type: ${getTypeLabel(maison.type)}
+• Statut: ${getStatutLabel(maison.statut)}
+
+📝 *DESCRIPTION*
+${maison.description}
+
+---
+Je suis intéressé(e) par ce bien et souhaite avoir plus d'informations.`;
 
   const stats = [
     { icon: Bed,      label: 'Chambres',      value: String(maison.chambres) },
@@ -37,13 +61,24 @@ export default async function MaisonDetailPage({ params }: Props) {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pt-20">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
-        {/* Breadcrumb */}
-        <nav className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-          <a href="/" className="hover:text-primary-600">Accueil</a>
-          <span className="mx-2">/</span>
-          <a href="/catalogue" className="hover:text-primary-600">Catalogue</a>
-          <span className="mx-2">/</span>
-          <span className="text-slate-700 dark:text-slate-200 line-clamp-1">{maison.titre}</span>
+        {/* Navigation supérieure */}
+        <div className="mb-8 flex items-center gap-4">
+          <Link
+            href="/catalogue"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-medium rounded-xl transition-colors border border-slate-200 dark:border-slate-700"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Retour au Catalogue
+          </Link>
+        </div>
+
+        {/* Breadcrumb amélioré */}
+        <nav className="text-sm text-slate-500 dark:text-slate-400 mb-8 flex flex-wrap items-center gap-2">
+          <Link href="/" className="hover:text-primary-600 transition-colors">Accueil</Link>
+          <span className="text-slate-300">/</span>
+          <Link href="/catalogue" className="hover:text-primary-600 transition-colors">Catalogue</Link>
+          <span className="text-slate-300">/</span>
+          <span className="text-slate-700 dark:text-slate-200 font-medium">{maison.titre}</span>
         </nav>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -108,12 +143,30 @@ export default async function MaisonDetailPage({ params }: Props) {
               </div>
 
               {/* CTA */}
-              <WhatsAppButton
-                message={waMessage}
-                label="Contacter l'agent"
-                size="md"
-                className="w-full justify-center"
-              />
+              {maison.statut === 'vendu' ? (
+                <button
+                  disabled
+                  className="w-full py-2.5 px-5 bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 font-semibold rounded-xl cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <span>Bien vendu - Non disponible</span>
+                </button>
+              ) : (
+                <WhatsAppButton
+                  message={waMessage}
+                  label="Contacter l'agent"
+                  size="md"
+                  className="w-full justify-center"
+                />
+              )}
+
+              {/* Bouton retour en bas */}
+              <Link
+                href="/catalogue"
+                className="mt-6 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 font-medium rounded-xl transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Retour au Catalogue
+              </Link>
             </div>
           </div>
         </div>

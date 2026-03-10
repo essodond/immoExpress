@@ -16,7 +16,7 @@ export default function WhatsAppButton({
   className = '',
   size = 'md',
 }: P) {
-  const num = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '+237600000000').replace(/\D/g, '');
+  const num = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '+22871608097').replace(/\D/g, '');
   const url = `https://wa.me/${num}?text=${encodeURIComponent(message)}`;
   return (
     <a
