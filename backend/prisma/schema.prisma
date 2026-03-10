@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Maison {
+  id          String   @id @default(cuid())
+  titre       String
+  description String
+  prix        Float
+  type        String
+  ville       String
+  quartier    String
+  chambres    Int
+  sallesBain  Int
+  superficie  Float
+  statut      String   @default("disponible")
+  videoUrl    String?
+  photos      Photo[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  url       String
+  publicId  String
+  isMain    Boolean  @default(false)
+  maison    Maison   @relation(fields: [maisonId], references: [id], onDelete: Cascade)
+  maisonId  String
+  createdAt DateTime @default(now())
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  nom       String
+  createdAt DateTime @default(now())
+}

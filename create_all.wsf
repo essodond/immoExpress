@@ -1,0 +1,638 @@
+<?xml version="1.0" encoding="utf-8"?>
+<job>
+<script language="JScript"><![CDATA[
+/* ============================================================
+   ImmoExpert – Full project scaffold (WSH/JScript)
+   Run: double-click  OR  cscript create_all.wsf
+   No Python, no Node.js required – pure Windows built-ins.
+   ============================================================ */
+
+var oFSO = new ActiveXObject("Scripting.FileSystemObject");
+var BASE = "C:\\Users\\DELL\\Documents\\projet\\immo";
+var ok = 0, fail = 0;
+
+function mkdirp(dir) {
+    if (!dir || dir.length < 4) return;
+    if (!oFSO.FolderExists(dir)) {
+        mkdirp(oFSO.GetParentFolderName(dir));
+        oFSO.CreateFolder(dir);
+    }
+}
+
+function writeFile(fp, content) {
+    try {
+        mkdirp(oFSO.GetParentFolderName(fp));
+        var stream = new ActiveXObject("ADODB.Stream");
+        stream.Type = 2;        // text
+        stream.Charset = "utf-8";
+        stream.Open();
+        stream.WriteText(content);
+        stream.SaveToFile(fp, 2); // 2 = overwrite
+        stream.Close();
+        WScript.Echo("  FILE " + fp.replace(BASE, ""));
+        ok++;
+    } catch(e) {
+        WScript.Echo("  ERR  " + fp + " -> " + e.message);
+        fail++;
+    }
+}
+
+// ── Backend directories ──────────────────────────────────────────────────────
+var B = BASE + "\\backend";
+var backendDirs = [B, B+"\\src", B+"\\src\\utils", B+"\\src\\middleware",
+                   B+"\\src\\controllers", B+"\\src\\routes", B+"\\prisma"];
+for (var i = 0; i < backendDirs.length; i++) {
+    mkdirp(backendDirs[i]);
+    WScript.Echo("  DIR  " + backendDirs[i].replace(BASE, ""));
+}
+
+// ── backend/package.json ────────────────────────────────────────────────────
+writeFile(B + "\\package.json",
+'{\n' +
+'  "name": "immo-backend",\n' +
+'  "version": "1.0.0",\n' +
+'  "description": "Real estate platform backend API",\n' +
+'  "main": "src/server.js",\n' +
+'  "scripts": {\n' +
+'    "start": "node src/server.js",\n' +
+'    "dev": "nodemon src/server.js",\n' +
+'    "db:migrate": "prisma migrate dev",\n' +
+'    "db:generate": "prisma generate",\n' +
+'    "db:seed": "node prisma/seed.js"\n' +
+'  },\n' +
+'  "dependencies": {\n' +
+'    "@prisma/client": "^5.0.0",\n' +
+'    "bcryptjs": "^2.4.3",\n' +
+'    "cloudinary": "^1.41.0",\n' +
+'    "cors": "^2.8.5",\n' +
+'    "dotenv": "^16.3.1",\n' +
+'    "express": "^4.18.2",\n' +
+'    "express-rate-limit": "^7.1.5",\n' +
+'    "helmet": "^7.1.0",\n' +
+'    "jsonwebtoken": "^9.0.2",\n' +
+'    "morgan": "^1.10.0",\n' +
+'    "multer": "^1.4.5-lts.1",\n' +
+'    "zod": "^3.22.4"\n' +
+'  },\n' +
+'  "devDependencies": {\n' +
+'    "nodemon": "^3.0.2",\n' +
+'    "prisma": "^5.0.0"\n' +
+'  }\n' +
+'}\n');
+
+// ── backend/.env.example ────────────────────────────────────────────────────
+writeFile(B + "\\.env.example",
+'DATABASE_URL="postgresql://user:password@localhost:5432/immo_db"\n' +
+'JWT_SECRET="your-secret-key-here"\n' +
+'JWT_EXPIRES_IN="7d"\n' +
+'CLOUDINARY_CLOUD_NAME="your-cloud-name"\n' +
+'CLOUDINARY_API_KEY="your-api-key"\n' +
+'CLOUDINARY_API_SECRET="your-api-secret"\n' +
+'FRONTEND_URL="http://localhost:3000"\n' +
+'PORT=5000\n');
+
+// ── backend/.gitignore ──────────────────────────────────────────────────────
+writeFile(B + "\\.gitignore",
+'node_modules/\n.env\ndist/\n*.log\n.DS_Store\n');
+
+// ── backend/prisma/schema.prisma ────────────────────────────────────────────
+writeFile(B + "\\prisma\\schema.prisma",
+'generator client {\n' +
+'  provider = "prisma-client-js"\n' +
+'}\n\n' +
+'datasource db {\n' +
+'  provider = "postgresql"\n' +
+'  url      = env("DATABASE_URL")\n' +
+'}\n\n' +
+'model Maison {\n' +
+'  id          String   @id @default(cuid())\n' +
+'  titre       String\n' +
+'  description String\n' +
+'  prix        Float\n' +
+'  type        String\n' +
+'  ville       String\n' +
+'  quartier    String\n' +
+'  chambres    Int\n' +
+'  sallesBain  Int\n' +
+'  superficie  Float\n' +
+'  statut      String   @default("disponible")\n' +
+'  videoUrl    String?\n' +
+'  photos      Photo[]\n' +
+'  createdAt   DateTime @default(now())\n' +
+'  updatedAt   DateTime @updatedAt\n' +
+'}\n\n' +
+'model Photo {\n' +
+'  id        String   @id @default(cuid())\n' +
+'  url       String\n' +
+'  publicId  String\n' +
+'  isMain    Boolean  @default(false)\n' +
+'  maison    Maison   @relation(fields: [maisonId], references: [id], onDelete: Cascade)\n' +
+'  maisonId  String\n' +
+'  createdAt DateTime @default(now())\n' +
+'}\n\n' +
+'model Admin {\n' +
+'  id        String   @id @default(cuid())\n' +
+'  email     String   @unique\n' +
+'  password  String\n' +
+'  nom       String\n' +
+'  createdAt DateTime @default(now())\n' +
+'}\n');
+
+// ── backend/prisma/seed.js ──────────────────────────────────────────────────
+writeFile(B + "\\prisma\\seed.js",
+"'use strict';\n\n" +
+"const { PrismaClient } = require('@prisma/client');\n" +
+"const bcrypt = require('bcryptjs');\n\n" +
+"const prisma = new PrismaClient();\n\n" +
+"async function main() {\n" +
+"  const existingAdmin = await prisma.admin.findUnique({\n" +
+"    where: { email: 'admin@immo.com' },\n" +
+"  });\n\n" +
+"  if (existingAdmin) {\n" +
+"    console.log('Admin already exists, skipping seed.');\n" +
+"    return;\n" +
+"  }\n\n" +
+"  const hashedPassword = await bcrypt.hash('Admin123!', 12);\n\n" +
+"  const admin = await prisma.admin.create({\n" +
+"    data: {\n" +
+"      email: 'admin@immo.com',\n" +
+"      password: hashedPassword,\n" +
+"      nom: 'Administrateur',\n" +
+"    },\n" +
+"  });\n\n" +
+"  console.log('Default admin created:', { id: admin.id, email: admin.email });\n" +
+"}\n\n" +
+"main()\n" +
+"  .catch((e) => {\n" +
+"    console.error('Seed error:', e);\n" +
+"    process.exit(1);\n" +
+"  })\n" +
+"  .finally(async () => {\n" +
+"    await prisma.$disconnect();\n" +
+"  });\n");
+
+// ── backend/src/utils/cloudinary.js ─────────────────────────────────────────
+writeFile(B + "\\src\\utils\\cloudinary.js",
+"'use strict';\n\n" +
+"const cloudinary = require('cloudinary').v2;\n\n" +
+"cloudinary.config({\n" +
+"  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,\n" +
+"  api_key: process.env.CLOUDINARY_API_KEY,\n" +
+"  api_secret: process.env.CLOUDINARY_API_SECRET,\n" +
+"});\n\n" +
+"const uploadBuffer = (buffer, folder = 'immo/maisons') => {\n" +
+"  return new Promise((resolve, reject) => {\n" +
+"    const uploadStream = cloudinary.uploader.upload_stream(\n" +
+"      {\n" +
+"        folder,\n" +
+"        resource_type: 'image',\n" +
+"        transformation: [\n" +
+"          { width: 1280, height: 720, crop: 'limit', quality: 'auto:good' },\n" +
+"        ],\n" +
+"      },\n" +
+"      (error, result) => {\n" +
+"        if (error) return reject(error);\n" +
+"        resolve({ url: result.secure_url, publicId: result.public_id });\n" +
+"      }\n" +
+"    );\n" +
+"    uploadStream.end(buffer);\n" +
+"  });\n" +
+"};\n\n" +
+"const deleteResource = async (publicId) => {\n" +
+"  return cloudinary.uploader.destroy(publicId);\n" +
+"};\n\n" +
+"module.exports = { uploadBuffer, deleteResource };\n");
+
+// ── backend/src/utils/jwt.js ─────────────────────────────────────────────────
+writeFile(B + "\\src\\utils\\jwt.js",
+"'use strict';\n\n" +
+"const jwt = require('jsonwebtoken');\n\n" +
+"const SECRET = process.env.JWT_SECRET;\n" +
+"const EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';\n\n" +
+"if (!SECRET) {\n" +
+"  throw new Error('JWT_SECRET environment variable is not set');\n" +
+"}\n\n" +
+"const signToken = (payload) => {\n" +
+"  return jwt.sign(payload, SECRET, { expiresIn: EXPIRES_IN });\n" +
+"};\n\n" +
+"const verifyToken = (token) => {\n" +
+"  return jwt.verify(token, SECRET);\n" +
+"};\n\n" +
+"module.exports = { signToken, verifyToken };\n");
+
+// ── backend/src/middleware/authMiddleware.js ─────────────────────────────────
+writeFile(B + "\\src\\middleware\\authMiddleware.js",
+"'use strict';\n\n" +
+"const { verifyToken } = require('../utils/jwt');\n" +
+"const { PrismaClient } = require('@prisma/client');\n\n" +
+"const prisma = new PrismaClient();\n\n" +
+"const protect = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const authHeader = req.headers.authorization;\n\n" +
+"    if (!authHeader || !authHeader.startsWith('Bearer ')) {\n" +
+"      return res.status(401).json({ success: false, message: 'Non autoris\u00e9. Token manquant.' });\n" +
+"    }\n\n" +
+"    const token = authHeader.split(' ')[1];\n" +
+"    const decoded = verifyToken(token);\n\n" +
+"    const admin = await prisma.admin.findUnique({\n" +
+"      where: { id: decoded.id },\n" +
+"      select: { id: true, email: true, nom: true, createdAt: true },\n" +
+"    });\n\n" +
+"    if (!admin) {\n" +
+"      return res.status(401).json({ success: false, message: 'Admin introuvable.' });\n" +
+"    }\n\n" +
+"    req.admin = admin;\n" +
+"    next();\n" +
+"  } catch (error) {\n" +
+"    if (error.name === 'TokenExpiredError') {\n" +
+"      return res.status(401).json({ success: false, message: 'Token expir\u00e9.' });\n" +
+"    }\n" +
+"    if (error.name === 'JsonWebTokenError') {\n" +
+"      return res.status(401).json({ success: false, message: 'Token invalide.' });\n" +
+"    }\n" +
+"    next(error);\n" +
+"  }\n" +
+"};\n\n" +
+"module.exports = { protect };\n");
+
+// ── backend/src/middleware/validate.js ───────────────────────────────────────
+writeFile(B + "\\src\\middleware\\validate.js",
+"'use strict';\n\n" +
+"const validate = (schema) => (req, res, next) => {\n" +
+"  const result = schema.safeParse(req.body);\n\n" +
+"  if (!result.success) {\n" +
+"    const errors = result.error.errors.map((e) => ({\n" +
+"      field: e.path.join('.'),\n" +
+"      message: e.message,\n" +
+"    }));\n" +
+"    return res.status(422).json({ success: false, message: 'Donn\u00e9es invalides.', errors });\n" +
+"  }\n\n" +
+"  req.validatedBody = result.data;\n" +
+"  next();\n" +
+"};\n\n" +
+"module.exports = { validate };\n");
+
+// ── backend/src/middleware/errorHandler.js ───────────────────────────────────
+writeFile(B + "\\src\\middleware\\errorHandler.js",
+"'use strict';\n\n" +
+"const errorHandler = (err, req, res, next) => {\n" +
+"  console.error('[' + new Date().toISOString() + '] ERROR:', err);\n\n" +
+"  if (err.code === 'P2002') {\n" +
+"    return res.status(409).json({ success: false, message: 'Une valeur unique existe d\u00e9j\u00e0.' });\n" +
+"  }\n" +
+"  if (err.code === 'P2025') {\n" +
+"    return res.status(404).json({ success: false, message: 'Ressource introuvable.' });\n" +
+"  }\n\n" +
+"  const statusCode = err.statusCode || err.status || 500;\n" +
+"  const message = err.message || 'Erreur interne du serveur.';\n\n" +
+"  res.status(statusCode).json({\n" +
+"    success: false,\n" +
+"    message,\n" +
+"    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),\n" +
+"  });\n" +
+"};\n\n" +
+"const notFound = (req, res) => {\n" +
+"  res.status(404).json({ success: false, message: 'Route introuvable: ' + req.method + ' ' + req.originalUrl });\n" +
+"};\n\n" +
+"module.exports = { errorHandler, notFound };\n");
+
+// ── backend/src/controllers/authController.js ───────────────────────────────
+writeFile(B + "\\src\\controllers\\authController.js",
+"'use strict';\n\n" +
+"const bcrypt = require('bcryptjs');\n" +
+"const { PrismaClient } = require('@prisma/client');\n" +
+"const { signToken } = require('../utils/jwt');\n\n" +
+"const prisma = new PrismaClient();\n\n" +
+"const login = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const { email, password } = req.body;\n\n" +
+"    if (!email || !password) {\n" +
+"      return res.status(400).json({ success: false, message: 'Email et mot de passe requis.' });\n" +
+"    }\n\n" +
+"    const admin = await prisma.admin.findUnique({ where: { email } });\n\n" +
+"    if (!admin || !(await bcrypt.compare(password, admin.password))) {\n" +
+"      return res.status(401).json({ success: false, message: 'Identifiants invalides.' });\n" +
+"    }\n\n" +
+"    const token = signToken({ id: admin.id, email: admin.email });\n\n" +
+"    res.json({\n" +
+"      success: true,\n" +
+"      token,\n" +
+"      admin: { id: admin.id, email: admin.email, nom: admin.nom },\n" +
+"    });\n" +
+"  } catch (error) {\n" +
+"    next(error);\n" +
+"  }\n" +
+"};\n\n" +
+"const refresh = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const token = signToken({ id: req.admin.id, email: req.admin.email });\n" +
+"    res.json({ success: true, token });\n" +
+"  } catch (error) {\n" +
+"    next(error);\n" +
+"  }\n" +
+"};\n\n" +
+"const me = (req, res) => {\n" +
+"  res.json({ success: true, admin: req.admin });\n" +
+"};\n\n" +
+"module.exports = { login, refresh, me };\n");
+
+// ── backend/src/controllers/maisonController.js ─────────────────────────────
+writeFile(B + "\\src\\controllers\\maisonController.js",
+"'use strict';\n\n" +
+"const { PrismaClient } = require('@prisma/client');\n" +
+"const { z } = require('zod');\n" +
+"const { deleteResource } = require('../utils/cloudinary');\n\n" +
+"const prisma = new PrismaClient();\n\n" +
+"const maisonSchema = z.object({\n" +
+"  titre: z.string().min(3).max(200),\n" +
+"  description: z.string().min(10),\n" +
+"  prix: z.number().positive(),\n" +
+"  type: z.enum(['vente', 'location']),\n" +
+"  ville: z.string().min(2),\n" +
+"  quartier: z.string().min(2),\n" +
+"  chambres: z.number().int().min(0),\n" +
+"  sallesBain: z.number().int().min(0),\n" +
+"  superficie: z.number().positive(),\n" +
+"  statut: z.enum(['disponible', 'vendu', 'loue']).optional().default('disponible'),\n" +
+"  videoUrl: z.string().url().optional().nullable(),\n" +
+"});\n\n" +
+"const getAll = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const { ville, type, prixMin, prixMax, chambres, statut } = req.query;\n" +
+"    const where = {};\n" +
+"    if (ville) where.ville = { contains: ville, mode: 'insensitive' };\n" +
+"    if (type) where.type = type;\n" +
+"    if (statut) where.statut = statut;\n" +
+"    if (chambres) where.chambres = { gte: parseInt(chambres, 10) };\n" +
+"    if (prixMin || prixMax) {\n" +
+"      where.prix = {};\n" +
+"      if (prixMin) where.prix.gte = parseFloat(prixMin);\n" +
+"      if (prixMax) where.prix.lte = parseFloat(prixMax);\n" +
+"    }\n" +
+"    const maisons = await prisma.maison.findMany({\n" +
+"      where,\n" +
+"      include: { photos: { orderBy: { isMain: 'desc' } } },\n" +
+"      orderBy: { createdAt: 'desc' },\n" +
+"    });\n" +
+"    res.json({ success: true, count: maisons.length, data: maisons });\n" +
+"  } catch (error) { next(error); }\n" +
+"};\n\n" +
+"const getFeatured = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const maisons = await prisma.maison.findMany({\n" +
+"      where: { statut: 'disponible' },\n" +
+"      include: { photos: { where: { isMain: true }, take: 1 } },\n" +
+"      orderBy: { createdAt: 'desc' },\n" +
+"      take: 6,\n" +
+"    });\n" +
+"    res.json({ success: true, data: maisons });\n" +
+"  } catch (error) { next(error); }\n" +
+"};\n\n" +
+"const getOne = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const maison = await prisma.maison.findUnique({\n" +
+"      where: { id: req.params.id },\n" +
+"      include: { photos: { orderBy: { isMain: 'desc' } } },\n" +
+"    });\n" +
+"    if (!maison) return res.status(404).json({ success: false, message: 'Maison introuvable.' });\n" +
+"    res.json({ success: true, data: maison });\n" +
+"  } catch (error) { next(error); }\n" +
+"};\n\n" +
+"const create = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const result = maisonSchema.safeParse(req.body);\n" +
+"    if (!result.success) {\n" +
+"      const errors = result.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message }));\n" +
+"      return res.status(422).json({ success: false, message: 'Donn\u00e9es invalides.', errors });\n" +
+"    }\n" +
+"    const maison = await prisma.maison.create({ data: result.data });\n" +
+"    res.status(201).json({ success: true, data: maison });\n" +
+"  } catch (error) { next(error); }\n" +
+"};\n\n" +
+"const update = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const result = maisonSchema.partial().safeParse(req.body);\n" +
+"    if (!result.success) {\n" +
+"      const errors = result.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message }));\n" +
+"      return res.status(422).json({ success: false, message: 'Donn\u00e9es invalides.', errors });\n" +
+"    }\n" +
+"    const maison = await prisma.maison.update({ where: { id: req.params.id }, data: result.data });\n" +
+"    res.json({ success: true, data: maison });\n" +
+"  } catch (error) { next(error); }\n" +
+"};\n\n" +
+"const remove = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const maison = await prisma.maison.findUnique({\n" +
+"      where: { id: req.params.id },\n" +
+"      include: { photos: true },\n" +
+"    });\n" +
+"    if (!maison) return res.status(404).json({ success: false, message: 'Maison introuvable.' });\n" +
+"    if (maison.photos.length > 0) {\n" +
+"      await Promise.allSettled(maison.photos.map(function(p) { return deleteResource(p.publicId); }));\n" +
+"    }\n" +
+"    await prisma.maison.delete({ where: { id: req.params.id } });\n" +
+"    res.json({ success: true, message: 'Maison supprim\u00e9e avec succ\u00e8s.' });\n" +
+"  } catch (error) { next(error); }\n" +
+"};\n\n" +
+"module.exports = { getAll, getFeatured, getOne, create, update, remove };\n");
+
+// ── backend/src/controllers/uploadController.js ─────────────────────────────
+writeFile(B + "\\src\\controllers\\uploadController.js",
+"'use strict';\n\n" +
+"const multer = require('multer');\n" +
+"const { PrismaClient } = require('@prisma/client');\n" +
+"const { uploadBuffer, deleteResource } = require('../utils/cloudinary');\n\n" +
+"const prisma = new PrismaClient();\n" +
+"const storage = multer.memoryStorage();\n\n" +
+"const fileFilter = (req, file, cb) => {\n" +
+"  const allowed = ['image/jpeg', 'image/png', 'image/webp'];\n" +
+"  if (allowed.includes(file.mimetype)) cb(null, true);\n" +
+"  else cb(new Error('Format de fichier non support\u00e9. Utilisez JPEG, PNG ou WebP.'), false);\n" +
+"};\n\n" +
+"const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });\n\n" +
+"const uploadPhotos = [\n" +
+"  upload.array('photos', 10),\n" +
+"  async (req, res, next) => {\n" +
+"    try {\n" +
+"      if (!req.files || req.files.length === 0)\n" +
+"        return res.status(400).json({ success: false, message: 'Aucune photo fournie.' });\n" +
+"      const maison = await prisma.maison.findUnique({ where: { id: req.params.maisonId } });\n" +
+"      if (!maison) return res.status(404).json({ success: false, message: 'Maison introuvable.' });\n" +
+"      const hasMain = await prisma.photo.findFirst({\n" +
+"        where: { maisonId: req.params.maisonId, isMain: true },\n" +
+"      });\n" +
+"      const uploadResults = await Promise.all(\n" +
+"        req.files.map((file) => uploadBuffer(file.buffer, 'immo/maisons/' + req.params.maisonId))\n" +
+"      );\n" +
+"      const photos = await Promise.all(\n" +
+"        uploadResults.map((result, index) =>\n" +
+"          prisma.photo.create({\n" +
+"            data: { url: result.url, publicId: result.publicId, isMain: !hasMain && index === 0, maisonId: req.params.maisonId },\n" +
+"          })\n" +
+"        )\n" +
+"      );\n" +
+"      res.status(201).json({ success: true, count: photos.length, data: photos });\n" +
+"    } catch (error) { next(error); }\n" +
+"  },\n" +
+"];\n\n" +
+"const deletePhoto = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const photo = await prisma.photo.findUnique({ where: { id: req.params.photoId } });\n" +
+"    if (!photo) return res.status(404).json({ success: false, message: 'Photo introuvable.' });\n" +
+"    await deleteResource(photo.publicId);\n" +
+"    await prisma.photo.delete({ where: { id: req.params.photoId } });\n" +
+"    if (photo.isMain) {\n" +
+"      const nextPhoto = await prisma.photo.findFirst({\n" +
+"        where: { maisonId: photo.maisonId }, orderBy: { createdAt: 'asc' },\n" +
+"      });\n" +
+"      if (nextPhoto) await prisma.photo.update({ where: { id: nextPhoto.id }, data: { isMain: true } });\n" +
+"    }\n" +
+"    res.json({ success: true, message: 'Photo supprim\u00e9e avec succ\u00e8s.' });\n" +
+"  } catch (error) { next(error); }\n" +
+"};\n\n" +
+"const setMainPhoto = async (req, res, next) => {\n" +
+"  try {\n" +
+"    const photo = await prisma.photo.findUnique({ where: { id: req.params.photoId } });\n" +
+"    if (!photo) return res.status(404).json({ success: false, message: 'Photo introuvable.' });\n" +
+"    await prisma.$transaction([\n" +
+"      prisma.photo.updateMany({ where: { maisonId: photo.maisonId }, data: { isMain: false } }),\n" +
+"      prisma.photo.update({ where: { id: photo.id }, data: { isMain: true } }),\n" +
+"    ]);\n" +
+"    res.json({ success: true, message: 'Photo principale mise \u00e0 jour.' });\n" +
+"  } catch (error) { next(error); }\n" +
+"};\n\n" +
+"module.exports = { uploadPhotos, deletePhoto, setMainPhoto };\n");
+
+// ── backend/src/routes/auth.js ───────────────────────────────────────────────
+writeFile(B + "\\src\\routes\\auth.js",
+"'use strict';\n\n" +
+"const { Router } = require('express');\n" +
+"const { login, refresh, me } = require('../controllers/authController');\n" +
+"const { protect } = require('../middleware/authMiddleware');\n\n" +
+"const router = Router();\n\n" +
+"router.post('/login', login);\n" +
+"router.post('/refresh', protect, refresh);\n" +
+"router.get('/me', protect, me);\n\n" +
+"module.exports = router;\n");
+
+// ── backend/src/routes/maisons.js ────────────────────────────────────────────
+writeFile(B + "\\src\\routes\\maisons.js",
+"'use strict';\n\n" +
+"const { Router } = require('express');\n" +
+"const { getAll, getFeatured, getOne, create, update, remove } = require('../controllers/maisonController');\n" +
+"const { protect } = require('../middleware/authMiddleware');\n\n" +
+"const router = Router();\n\n" +
+"router.get('/featured', getFeatured);\n" +
+"router.get('/', getAll);\n" +
+"router.get('/:id', getOne);\n" +
+"router.post('/', protect, create);\n" +
+"router.put('/:id', protect, update);\n" +
+"router.delete('/:id', protect, remove);\n\n" +
+"module.exports = router;\n");
+
+// ── backend/src/routes/upload.js ─────────────────────────────────────────────
+writeFile(B + "\\src\\routes\\upload.js",
+"'use strict';\n\n" +
+"const { Router } = require('express');\n" +
+"const { uploadPhotos, deletePhoto, setMainPhoto } = require('../controllers/uploadController');\n" +
+"const { protect } = require('../middleware/authMiddleware');\n\n" +
+"const router = Router();\n\n" +
+"router.post('/photos/:maisonId', protect, uploadPhotos);\n" +
+"router.delete('/photos/:photoId', protect, deletePhoto);\n" +
+"router.put('/photos/:photoId/main', protect, setMainPhoto);\n\n" +
+"module.exports = router;\n");
+
+// ── backend/src/server.js ────────────────────────────────────────────────────
+writeFile(B + "\\src\\server.js",
+"'use strict';\n\n" +
+"require('dotenv').config();\n\n" +
+"const express = require('express');\n" +
+"const cors = require('cors');\n" +
+"const helmet = require('helmet');\n" +
+"const morgan = require('morgan');\n" +
+"const rateLimit = require('express-rate-limit');\n\n" +
+"const authRoutes = require('./routes/auth');\n" +
+"const maisonRoutes = require('./routes/maisons');\n" +
+"const uploadRoutes = require('./routes/upload');\n" +
+"const { errorHandler, notFound } = require('./middleware/errorHandler');\n\n" +
+"const app = express();\n" +
+"const PORT = process.env.PORT || 5000;\n\n" +
+"app.use(helmet());\n" +
+"app.use(cors({\n" +
+"  origin: ['http://localhost:3000', process.env.FRONTEND_URL].filter(Boolean),\n" +
+"  credentials: true,\n" +
+"}));\n" +
+"app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));\n" +
+"app.use(express.json({ limit: '10mb' }));\n" +
+"app.use(express.urlencoded({ extended: true }));\n\n" +
+"const publicLimiter = rateLimit({\n" +
+"  windowMs: 15 * 60 * 1000,\n" +
+"  max: 100,\n" +
+"  standardHeaders: true,\n" +
+"  legacyHeaders: false,\n" +
+"  message: { success: false, message: 'Trop de requ\\u00eates. R\\u00e9essayez dans 15 minutes.' },\n" +
+"});\n\n" +
+"const authLimiter = rateLimit({\n" +
+"  windowMs: 15 * 60 * 1000,\n" +
+"  max: 20,\n" +
+"  standardHeaders: true,\n" +
+"  legacyHeaders: false,\n" +
+"  message: { success: false, message: 'Trop de tentatives de connexion. R\\u00e9essayez dans 15 minutes.' },\n" +
+"});\n\n" +
+"app.get('/api/health', function(req, res) {\n" +
+"  res.json({ success: true, message: 'API op\\u00e9rationnelle', timestamp: new Date().toISOString() });\n" +
+"});\n\n" +
+"app.use('/api/auth', authLimiter, authRoutes);\n" +
+"app.use('/api/maisons', publicLimiter, maisonRoutes);\n" +
+"app.use('/api/upload', publicLimiter, uploadRoutes);\n\n" +
+"app.use(notFound);\n" +
+"app.use(errorHandler);\n\n" +
+"app.listen(PORT, function() {\n" +
+"  console.log('\\n Serveur d\\u00e9marr\\u00e9 sur http://localhost:' + PORT);\n" +
+"  console.log(' Environnement: ' + (process.env.NODE_ENV || 'development'));\n" +
+"  console.log(' API immobili\\u00e8re pr\\u00eate\\n');\n" +
+"});\n\n" +
+"module.exports = app;\n");
+
+// ── Frontend directories (with .gitkeep) ────────────────────────────────────
+var F = BASE + "\\frontend";
+var frontendDirs = [
+    "src\\app\\catalogue",
+    "src\\app\\maison\\[id]",
+    "src\\app\\a-propos",
+    "src\\app\\admin\\login",
+    "src\\app\\admin\\dashboard",
+    "src\\app\\admin\\maisons\\nouvelle",
+    "src\\app\\admin\\maisons\\[id]",
+    "src\\components\\layout",
+    "src\\components\\maison",
+    "src\\components\\ui",
+    "src\\lib",
+    "src\\types",
+    "src\\providers",
+    "public"
+];
+
+for (var j = 0; j < frontendDirs.length; j++) {
+    var fullDir = F + "\\" + frontendDirs[j];
+    mkdirp(fullDir);
+    writeFile(fullDir + "\\.gitkeep", "");
+    WScript.Echo("  DIR  frontend\\" + frontendDirs[j]);
+}
+
+// ── Summary ─────────────────────────────────────────────────────────────────
+WScript.Echo("\n=== DONE ===");
+WScript.Echo("Files created OK : " + ok);
+WScript.Echo("Errors           : " + fail);
+if (fail === 0) {
+    WScript.Echo("\nAll backend & frontend files created successfully!");
+    WScript.Echo("Next steps:");
+    WScript.Echo("  cd backend && npm install");
+    WScript.Echo("  copy .env.example .env  (then fill in your values)");
+    WScript.Echo("  npx prisma migrate dev");
+    WScript.Echo("  npm run dev");
+} else {
+    WScript.Echo("\nSome errors occurred. Check output above.");
+}
+]]></script>
+</job>
